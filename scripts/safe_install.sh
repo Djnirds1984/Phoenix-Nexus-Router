@@ -308,7 +308,10 @@ install_services_safely() {
     
     # Copy systemd service files (but don't enable yet)
     log "Copying systemd service files..."
-    cp "$PROJECT_ROOT/systemd/"*.service /etc/systemd/system/ 2>/dev/null || true
+    cp "$PROJECT_ROOT/systemd/routeros-"*.service /etc/systemd/system/ 2>/dev/null || true
+    
+    # Reload systemd to recognize new services
+    systemctl daemon-reload
     
     # Create safe startup script
     cat > "$PROJECT_ROOT/start_router.sh" << 'EOF'
@@ -333,22 +336,22 @@ source "$PROJECT_ROOT/venv/bin/activate"
 # Start services safely
 echo "Starting Phoenix Nexus Router services..."
 
+# Start routing manager first (dependency for watchdog)
+if systemctl list-unit-files | grep -q routeros-routing.service; then
+    systemctl start routeros-routing.service
+    echo "✓ Routing manager started"
+fi
+
 # Start watchdog service
-if [[ -f "$PROJECT_ROOT/systemd/phoenix-watchdog.service" ]]; then
-    systemctl start phoenix-watchdog.service
+if systemctl list-unit-files | grep -q routeros-watchdog.service; then
+    systemctl start routeros-watchdog.service
     echo "✓ Watchdog service started"
 fi
 
 # Start web interface
-if [[ -f "$PROJECT_ROOT/systemd/phoenix-web.service" ]]; then
-    systemctl start phoenix-web.service
+if systemctl list-unit-files | grep -q routeros-web.service; then
+    systemctl start routeros-web.service
     echo "✓ Web interface started"
-fi
-
-# Start routing manager
-if [[ -f "$PROJECT_ROOT/systemd/phoenix-routing.service" ]]; then
-    systemctl start phoenix-routing.service
-    echo "✓ Routing manager started"
 fi
 
 echo "Router services started successfully!"
@@ -393,14 +396,14 @@ rollback() {
     restore_network_config
     
     # Stop any started services
-    systemctl stop phoenix-watchdog.service 2>/dev/null || true
-    systemctl stop phoenix-web.service 2>/dev/null || true
-    systemctl stop phoenix-routing.service 2>/dev/null || true
+    systemctl stop routeros-watchdog.service 2>/dev/null || true
+    systemctl stop routeros-web.service 2>/dev/null || true
+    systemctl stop routeros-routing.service 2>/dev/null || true
     
     # Disable services
-    systemctl disable phoenix-watchdog.service 2>/dev/null || true
-    systemctl disable phoenix-web.service 2>/dev/null || true
-    systemctl disable phoenix-routing.service 2>/dev/null || true
+    systemctl disable routeros-watchdog.service 2>/dev/null || true
+    systemctl disable routeros-web.service 2>/dev/null || true
+    systemctl disable routeros-routing.service 2>/dev/null || true
     
     error "Rollback completed. Network should be restored."
     exit 1

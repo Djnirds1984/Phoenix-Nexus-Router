@@ -1,0 +1,48 @@
+[Unit]
+Description=Smart Multi-WAN Router OS Routing Manager
+Documentation=https://github.com/Djnirds1984/Phoenix-Nexus-Router
+After=network.target network-online.target
+Wants=network-online.target
+Before=routeros-watchdog.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/routeros/routing
+ExecStart=/usr/bin/python3 /opt/routeros/routing/routing_manager.py
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log /opt/routeros/config /var/run /proc/sys/net
+NoNewPrivileges=true
+ProtectKernelTunables=false
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Capabilities needed for routing
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=routeros-routing
+
+[Install]
+WantedBy=multi-user.target

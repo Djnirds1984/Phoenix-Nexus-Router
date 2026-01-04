@@ -1,0 +1,43 @@
+[Unit]
+Description=Smart Multi-WAN Router OS Web Management Interface
+Documentation=https://github.com/Djnirds1984/Phoenix-Nexus-Router
+After=network.target network-online.target routeros-watchdog.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/routeros/web
+ExecStart=/usr/bin/python3 /opt/routeros/web/enhanced_app.py --host 0.0.0.0 --port 8080
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log /opt/routeros/config /opt/routeros/web /var/run
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=routeros-web
+
+[Install]
+WantedBy=multi-user.target
