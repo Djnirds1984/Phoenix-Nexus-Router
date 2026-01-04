@@ -137,6 +137,304 @@ file = /var/log/routeros.log
 max_size = 10MB
 ```
 
+## Installation Instructions
+
+### Prerequisites
+- Fresh Ubuntu 24.04 x64 installation (Server or Desktop)
+- Minimum 2 network interfaces (3 recommended: 2x WAN, 1x LAN)
+- Root/sudo access
+- Internet connection for package downloads
+
+### Hardware Requirements
+- **CPU**: Dual-core processor (x86_64)
+- **RAM**: 2GB minimum (4GB recommended)
+- **Storage**: 20GB minimum (40GB recommended)
+- **Network**: 2-3 Ethernet ports (PCIe NICs recommended for better performance)
+
+### Network Topology
+```
+                    Internet
+                       |
+         +--------------+--------------+
+         |              |              |
+      [ISP 1]        [ISP 2]        [ISP 3] (optional)
+         |              |              |
+      [WAN1]         [WAN2]         [WAN3]
+         |              |              |
+         +------+-------+------+-------+
+                |              |
+            [RouterOS Box]
+                |
+             [LAN]
+                |
+         +------+-------+------+
+         |       |       |       |
+      [PC 1]  [PC 2]  [PC 3]  [Switch/AP]
+```
+
+### Fresh Ubuntu Setup (Step-by-Step)
+
+#### 1. Initial System Preparation
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install essential tools
+sudo apt install -y git curl wget net-tools
+
+# Disable conflicting network management services
+sudo systemctl disable NetworkManager
+sudo systemctl stop NetworkManager
+sudo systemctl disable systemd-networkd
+sudo systemctl stop systemd-networkd
+```
+
+#### 2. Identify Network Interfaces
+```bash
+# List all network interfaces
+ip link show
+
+# Note your interface names (e.g., eth0, eth1, eth2)
+# Typically: eth0=WAN1, eth1=WAN2, eth2=LAN
+```
+
+#### 3. Configure Static IP for LAN Interface
+```bash
+# Edit netplan configuration
+sudo nano /etc/netplan/00-installer-config.yaml
+
+# Add LAN interface configuration:
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth2:  # Replace with your LAN interface
+      dhcp4: no
+      addresses: [192.168.1.1/24]
+      gateway4: null
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+```
+
+#### 4. Apply Network Configuration
+```bash
+# Apply netplan configuration
+sudo netplan apply
+
+# Verify LAN interface
+ip addr show eth2  # Replace with your LAN interface
+```
+
+#### 5. Download and Install RouterOS
+```bash
+# Clone the repository
+cd /opt
+sudo git clone https://github.com/Djnirds1984/Phoenix-Nexus-Router.git
+sudo mv Phoenix-Nexus-Router routeros
+sudo chown -R root:root routeros
+sudo chmod -R 755 routeros
+
+# Navigate to installation directory
+cd routeros
+```
+
+#### 6. Run Installation Script
+```bash
+# Make setup script executable
+sudo chmod +x setup.sh
+
+# Run installation with your specific network configuration
+sudo ./setup.sh \
+  --wan1-interface eth0 \
+  --wan1-gateway 192.168.100.1 \
+  --wan2-interface eth1 \
+  --wan2-gateway 192.168.200.1 \
+  --lan-interface eth2 \
+  --lan-network 192.168.1.0/24
+
+# Follow the installation prompts
+```
+
+#### 7. Configure WAN Interfaces
+After installation, configure your WAN interfaces:
+```bash
+# Edit WAN interface configurations
+sudo nano /etc/netplan/01-wan-config.yaml
+
+# Add WAN configurations:
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:  # WAN1 - Replace with your ISP1 settings
+      dhcp4: yes
+      dhcp4-overrides:
+        use-dns: false
+      nameservers:
+        addresses: [8.8.8.8, 8.8.4.4]
+    
+    eth1:  # WAN2 - Replace with your ISP2 settings
+      dhcp4: yes
+      dhcp4-overrides:
+        use-dns: false
+      nameservers:
+        addresses: [1.1.1.1, 1.0.0.1]
+```
+
+#### 8. Apply WAN Configuration
+```bash
+# Apply WAN configuration
+sudo netplan apply
+
+# Verify all interfaces
+ip addr show
+```
+
+#### 9. Start RouterOS Services
+```bash
+# Start the RouterOS services
+sudo systemctl start routeros-watchdog
+sudo systemctl start routeros-web
+
+# Enable services to start on boot
+sudo systemctl enable routeros-watchdog
+sudo systemctl enable routeros-web
+
+# Check service status
+sudo systemctl status routeros-watchdog
+sudo systemctl status routeros-web
+```
+
+#### 10. Verify Installation
+```bash
+# Check system status
+/opt/routeros/scripts/status.sh
+
+# Test kill-switch functionality
+routeros-kill-switch --status
+
+# Access web interface
+# Open browser to: http://192.168.1.1:8080
+```
+
+### Quick Installation (One-Liner)
+For experienced users, here's a quick installation:
+```bash
+# One-liner installation (customize interfaces as needed)
+cd /opt && sudo git clone https://github.com/Djnirds1984/Phoenix-Nexus-Router.git routeros && cd routeros && sudo chmod +x setup.sh && sudo ./setup.sh --wan1-interface eth0 --wan1-gateway 192.168.100.1 --wan2-interface eth1 --wan2-gateway 192.168.200.1 --lan-interface eth2 --lan-network 192.168.1.0/24
+```
+
+### Post-Installation Configuration
+
+#### 1. Configure DHCP Server (Optional)
+```bash
+# Install and configure DHCP server for LAN
+sudo apt install -y isc-dhcp-server
+
+# Edit DHCP configuration
+sudo nano /etc/dhcp/dhcpd.conf
+
+# Add LAN DHCP configuration:
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  range 192.168.1.100 192.168.1.200;
+  option routers 192.168.1.1;
+  option domain-name-servers 8.8.8.8, 1.1.1.1;
+  default-lease-time 600;
+  max-lease-time 7200;
+}
+
+# Configure DHCP to listen on LAN interface
+echo 'INTERFACESv4="eth2"' | sudo tee /etc/default/isc-dhcp-server
+
+# Start DHCP service
+sudo systemctl start isc-dhcp-server
+sudo systemctl enable isc-dhcp-server
+```
+
+#### 2. Configure Port Forwarding (Optional)
+```bash
+# Add port forwarding rules to nftables
+sudo nano /etc/nftables.conf
+
+# Example port forwarding:
+# Forward port 8080 to internal server
+# tcp dport 8080 dnat to 192.168.1.100:80
+```
+
+#### 3. Set Up Monitoring Alerts (Optional)
+```bash
+# Configure email alerts (requires mail server setup)
+# Edit health monitor configuration
+sudo nano /opt/routeros/config/health_monitor.json
+
+# Add email notification settings
+```
+
+### Troubleshooting Installation
+
+#### Common Installation Issues
+
+1. **Interface Detection Problems**
+   ```bash
+   # Check available interfaces
+   ip link show
+   
+   # Verify interface names in configuration
+   cat /opt/routeros/config/interfaces.json
+   ```
+
+2. **Service Startup Failures**
+   ```bash
+   # Check service logs
+   sudo journalctl -u routeros-watchdog -n 50
+   sudo journalctl -u routeros-web -n 50
+   
+   # Check file permissions
+   ls -la /opt/routeros/
+   ```
+
+3. **Network Connectivity Issues**
+   ```bash
+   # Test WAN connectivity
+   ping -I eth0 8.8.8.8
+   ping -I eth1 8.8.8.8
+   
+   # Check routing tables
+   ip route show
+   
+   # Verify DNS resolution
+   nslookup google.com
+   ```
+
+4. **Web Interface Access Problems**
+   ```bash
+   # Check firewall rules
+   sudo nft list ruleset
+   
+   # Test local web interface
+   curl http://localhost:8080
+   
+   # Check if port is listening
+   sudo netstat -tlnp | grep 8080
+   ```
+
+### Verification Checklist
+After installation, verify:
+- [ ] All network interfaces are detected and configured
+- [ ] RouterOS services are running without errors
+- [ ] Web interface is accessible from LAN
+- [ ] WAN interfaces can reach the internet
+- [ ] Kill-switch commands work properly
+- [ ] Load balancing is functioning
+- [ ] Failover works when disconnecting WAN interfaces
+
+### Default Access Information
+- **Web Interface**: http://192.168.1.1:8080
+- **API Port**: 8081
+- **Log Files**: `/var/log/routeros-*.log`
+- **Configuration**: `/opt/routeros/config/`
+- **Status Script**: `/opt/routeros/scripts/status.sh`
+
 ## Usage
 
 ### Web Interface
