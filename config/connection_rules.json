@@ -1,0 +1,61 @@
+{
+  "traffic_rules": {
+    "voip": {
+      "ports": [5060, 5061, 5062, 16384, 16385, 16386, 16387, 16388, 16389, 16390],
+      "protocols": ["udp", "tcp"],
+      "priority": "high",
+      "sticky_session": true,
+      "description": "VoIP/SIP traffic"
+    },
+    "gaming": {
+      "ports": [27015, 27016, 27017, 27018, 27019, 27020, 27021, 27022, 27023, 27024, 27025],
+      "protocols": ["udp", "tcp"],
+      "priority": "high",
+      "sticky_session": true,
+      "description": "Gaming traffic (Steam, etc.)"
+    },
+    "streaming": {
+      "ports": [1935, 1936, 8080, 8081, 8082, 8083, 8084, 8085, 554, 8554, 8555],
+      "protocols": ["tcp", "udp"],
+      "priority": "medium",
+      "sticky_session": false,
+      "description": "Streaming media traffic"
+    },
+    "banking": {
+      "ports": [443, 8443, 9443, 1443, 2443, 3443, 4443],
+      "protocols": ["tcp"],
+      "priority": "highest",
+      "sticky_session": true,
+      "description": "Banking and financial traffic"
+    },
+    "dns": {
+      "ports": [53, 5353],
+      "protocols": ["udp", "tcp"],
+      "priority": "high",
+      "sticky_session": false,
+      "description": "DNS traffic"
+    },
+    "ssh": {
+      "ports": [22, 2222, 22222],
+      "protocols": ["tcp"],
+      "priority": "medium",
+      "sticky_session": true,
+      "description": "SSH traffic"
+    }
+  },
+  "connection_limits": {
+    "max_connections_per_ip": 1000,
+    "max_sticky_sessions": 500,
+    "connection_timeout": 3600,
+    "cleanup_interval": 300
+  },
+  "marking_rules": {
+    "voip_mark": 0x10,
+    "gaming_mark": 0x20,
+    "banking_mark": 0x30,
+    "streaming_mark": 0x40,
+    "dns_mark": 0x50,
+    "ssh_mark": 0x60,
+    "general_mark": 0x01
+  }
+}

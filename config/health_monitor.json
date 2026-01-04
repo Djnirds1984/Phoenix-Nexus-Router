@@ -1,0 +1,36 @@
+{
+  "ping_target": "1.1.1.1",
+  "timeout_seconds": 2,
+  "retry_count": 3,
+  "check_interval": 5,
+  "recovery_interval": 30,
+  "max_latency_ms": 2000,
+  "max_packet_loss": 5.0,
+  "interfaces": [
+    {
+      "name": "eth0",
+      "gateway": "192.168.100.1",
+      "weight": 2,
+      "description": "Primary WAN - ISP 1"
+    },
+    {
+      "name": "eth1",
+      "gateway": "192.168.200.1",
+      "weight": 1,
+      "description": "Secondary WAN - ISP 2"
+    }
+  ],
+  "alerting": {
+    "enabled": true,
+    "email_notifications": false,
+    "webhook_url": "",
+    "failure_threshold": 3,
+    "recovery_notifications": true
+  },
+  "logging": {
+    "level": "INFO",
+    "max_log_size": "10MB",
+    "log_rotation": true,
+    "retention_days": 30
+  }
+}

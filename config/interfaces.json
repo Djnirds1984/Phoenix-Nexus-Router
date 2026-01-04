@@ -1,0 +1,30 @@
+{
+  "wan_interfaces": [
+    {
+      "name": "eth0",
+      "gateway": "192.168.100.1",
+      "weight": 2,
+      "dns": ["8.8.8.8", "8.8.4.4"],
+      "description": "Primary WAN - ISP 1"
+    },
+    {
+      "name": "eth1", 
+      "gateway": "192.168.200.1",
+      "weight": 1,
+      "dns": ["1.1.1.1", "1.0.0.1"],
+      "description": "Secondary WAN - ISP 2"
+    }
+  ],
+  "lan_interface": {
+    "name": "eth2",
+    "ip": "192.168.1.1",
+    "netmask": "255.255.255.0",
+    "dhcp_range": "192.168.1.100-192.168.1.200"
+  },
+  "management": {
+    "web_port": 8080,
+    "api_port": 8081,
+    "enable_ssh": true,
+    "enable_web": true
+  }
+}
