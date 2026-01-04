@@ -58,26 +58,51 @@ class RouteManager:
     def _load_config(self):
         """Load interface configuration from JSON file"""
         try:
+            if not self.config_file or not os.path.exists(self.config_file):
+                self.logger.warning(f"Config file {self.config_file} not found, using defaults")
+                self._create_default_interfaces()
+                return
+                
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
-                
-            for iface_config in config.get('wan_interfaces', []):
-                iface = WANInterface(
-                    name=iface_config['name'],
-                    gateway=iface_config['gateway'],
-                    weight=iface_config.get('weight', 1)
-                )
-                self.interfaces[iface.name] = iface
+            
+            # Handle different config formats
+            if 'interfaces' in config:
+                # New format from routing_manager.py
+                for iface_name, iface_config in config['interfaces'].items():
+                    if iface_config.get('type') == 'wan':
+                        iface = WANInterface(
+                            name=iface_name,
+                            gateway=iface_config.get('gateway', '192.168.1.1'),
+                            weight=iface_config.get('weight', 1)
+                        )
+                        self.interfaces[iface.name] = iface
+            elif 'wan_interfaces' in config:
+                # Original format
+                for iface_config in config.get('wan_interfaces', []):
+                    iface = WANInterface(
+                        name=iface_config['name'],
+                        gateway=iface_config['gateway'],
+                        weight=iface_config.get('weight', 1)
+                    )
+                    self.interfaces[iface.name] = iface
+            else:
+                # Fallback - create default interfaces
+                self._create_default_interfaces()
                 
             self.logger.info(f"Loaded {len(self.interfaces)} WAN interfaces")
             
         except Exception as e:
             self.logger.error(f"Failed to load config: {e}")
-            # Default configuration
-            self.interfaces = {
-                'eth0': WANInterface('eth0', '192.168.100.1', weight=2),
-                'eth1': WANInterface('eth1', '192.168.200.1', weight=1)
-            }
+            self._create_default_interfaces()
+    
+    def _create_default_interfaces(self):
+        """Create default WAN interfaces"""
+        self.interfaces = {
+            'eth0': WANInterface('eth0', '192.168.100.1', weight=2),
+            'eth1': WANInterface('eth1', '192.168.200.1', weight=1)
+        }
+        self.logger.info("Created default WAN interfaces")
 
     def add_interface(self, interface_config: Dict) -> bool:
         """Dynamically add a new WAN interface"""
