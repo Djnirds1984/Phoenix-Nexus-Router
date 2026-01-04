@@ -78,6 +78,45 @@ class RouteManager:
                 'eth0': WANInterface('eth0', '192.168.100.1', weight=2),
                 'eth1': WANInterface('eth1', '192.168.200.1', weight=1)
             }
+
+    def add_interface(self, interface_config: Dict) -> bool:
+        """Dynamically add a new WAN interface"""
+        try:
+            interface_name = interface_config['name']
+            gateway = interface_config['gateway']
+            weight = interface_config.get('weight', 1)
+            
+            # Check if interface already exists
+            if interface_name in self.interfaces:
+                self.logger.warning(f"Interface {interface_name} already exists")
+                return False
+            
+            # Create new interface
+            interface = WANInterface(
+                name=interface_name,
+                gateway=gateway,
+                weight=weight,
+                state=InterfaceState.UP
+            )
+            
+            self.interfaces[interface_name] = interface
+            
+            # Add routing table for new interface
+            table_id = 100 + len(self.interfaces)
+            self.routing_tables[interface_name] = table_id
+            
+            # Configure routing for new interface
+            self._update_interface_routing(interface, interface_name)
+            
+            # Update multipath routing
+            self._configure_multipath_routing()
+            
+            self.logger.info(f"Successfully added interface {interface_name} with gateway {gateway}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to add interface: {e}")
+            return False
     
     def _run_command(self, command: List[str], check: bool = True) -> subprocess.CompletedProcess:
         """Execute system command and return result"""

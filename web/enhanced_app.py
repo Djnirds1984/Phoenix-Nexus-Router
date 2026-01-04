@@ -14,9 +14,17 @@ from datetime import datetime
 from threading import Lock
 from latency_monitor import LatencyMonitor
 import threading
+import sys
+
+# Add web module to path for WAN manager
+sys.path.append('/opt/routeros/web')
+from wan_manager import wan_manager_bp
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'routeros-secret-key-change-in-production'
+
+# Register WAN management blueprint
+app.register_blueprint(wan_manager_bp)
 
 # Global lock for thread safety
 status_lock = Lock()
@@ -558,6 +566,82 @@ def create_enhanced_dashboard():
             .controls { flex-direction: column; }
             .time-range-selector { justify-content: center; }
         }
+        
+        /* WAN Management Styles */
+        .available-interfaces {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .wan-config-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-content h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #34495e;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+        
+        .form-actions button {
+            min-width: 120px;
+        }
     </style>
 </head>
 <body>
@@ -597,6 +681,7 @@ def create_enhanced_dashboard():
                     <button class="btn btn-success" onclick="startWatchdog()">▶️ Start Watchdog</button>
                     <button class="btn btn-danger" onclick="stopWatchdog()">⏹️ Stop Watchdog</button>
                     <button class="btn btn-warning" onclick="restartWatchdog()">🔄 Restart Watchdog</button>
+                    <button class="btn btn-info" onclick="showWANManagement()">🌐 WAN Management</button>
                 </div>
             </div>
             
@@ -605,6 +690,19 @@ def create_enhanced_dashboard():
                 <h2>Interface Status</h2>
                 <div id="interface-status">
                     <div class="alert alert-info">Loading interface status...</div>
+                </div>
+            </div>
+            
+            <!-- WAN Management -->
+            <div class="card">
+                <h2>WAN Interface Management</h2>
+                <div class="controls">
+                    <button class="btn btn-success" onclick="showAddWANDialog()">➕ Add WAN Interface</button>
+                    <button class="btn btn-primary" onclick="refreshAvailableInterfaces()">🔄 Refresh Available</button>
+                    <button class="btn btn-info" onclick="autoDetectPrimaryWAN()">🔍 Auto-Detect Primary WAN</button>
+                </div>
+                <div id="wan-management">
+                    <div class="alert alert-info">Loading WAN management interface...</div>
                 </div>
             </div>
             
@@ -1018,6 +1116,197 @@ def create_enhanced_dashboard():
             if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
             
             return date.toLocaleString();
+        }
+        
+        // WAN Management Functions
+        function showWANManagement() {
+            refreshAvailableInterfaces();
+        }
+        
+        function refreshAvailableInterfaces() {
+            fetch('/api/wan/available')
+                .then(response => response.json())
+                .then(data => {
+                    updateWANManagementInterface(data.interfaces);
+                })
+                .catch(error => {
+                    console.error('Failed to refresh available interfaces:', error);
+                    document.getElementById('wan-management').innerHTML = 
+                        '<div class="alert alert-danger">Failed to load available interfaces</div>';
+                });
+        }
+        
+        function updateWANManagementInterface(interfaces) {
+            const container = document.getElementById('wan-management');
+            
+            if (interfaces.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No available interfaces for WAN configuration</div>';
+                return;
+            }
+            
+            let html = '<div class="available-interfaces">';
+            interfaces.forEach(iface => {
+                html += `
+                    <div class="interface-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>${iface.name}</strong>
+                            <span class="status-indicator ${iface.status === 'UP' ? 'status-healthy' : 'status-failed'}"></span>
+                        </div>
+                        <div style="font-size: 0.9em; color: #666; margin: 10px 0;">
+                            <div>MAC: ${iface.mac_address}</div>
+                            <div>Status: ${iface.status}</div>
+                            <div>Speed: ${iface.speed || 'Unknown'}</div>
+                            <div>IP: ${iface.ip_address || 'No IP'}</div>
+                        </div>
+                        <div class="controls">
+                            <button class="btn btn-sm btn-success" onclick="suggestWANConfig('${iface.name}')">Configure</button>
+                            <button class="btn btn-sm btn-primary" onclick="testConnectivity('${iface.name}')">Test</button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+        
+        function suggestWANConfig(interfaceName) {
+            fetch(`/api/wan/suggest/${interfaceName}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showAlert('danger', data.error);
+                        return;
+                    }
+                    
+                    showWANConfigDialog(data, interfaceName);
+                })
+                .catch(error => {
+                    showAlert('danger', 'Failed to get configuration suggestion');
+                });
+        }
+        
+        function showWANConfigDialog(suggestion, interfaceName) {
+            const modal = document.createElement('div');
+            modal.className = 'wan-config-modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h3>Configure WAN Interface: ${interfaceName}</h3>
+                    <form id="wan-config-form">
+                        <div class="form-group">
+                            <label>Gateway:</label>
+                            <input type="text" id="gateway" value="${suggestion.gateway}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Weight:</label>
+                            <select id="weight">
+                                ${suggestion.weight_options.map(w => 
+                                    `<option value="${w}" ${w === suggestion.weight ? 'selected' : ''}>${w}</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>DNS Servers:</label>
+                            <select id="dns">
+                                ${suggestion.dns_options.map((dns, i) => 
+                                    `<option value="${dns.join(',')}" ${i === 0 ? 'selected' : ''}>${dns.join(', ')}</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Description:</label>
+                            <input type="text" id="description" value="${suggestion.description}">
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-success">Add WAN Interface</button>
+                            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Handle form submission
+            document.getElementById('wan-config-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addWANInterface(interfaceName, {
+                    name: interfaceName,
+                    gateway: document.getElementById('gateway').value,
+                    weight: parseInt(document.getElementById('weight').value),
+                    dns: document.getElementById('dns').value.split(','),
+                    description: document.getElementById('description').value
+                });
+            });
+        }
+        
+        function addWANInterface(interfaceName, config) {
+            fetch('/api/wan/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    closeModal();
+                    refreshAvailableInterfaces();
+                    refreshStatus();
+                } else {
+                    showAlert('danger', data.error || 'Failed to add interface');
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'Failed to add WAN interface');
+            });
+        }
+        
+        function testConnectivity(interfaceName) {
+            fetch(`/api/wan/test-connectivity/${interfaceName}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert('success', `Connectivity test for ${interfaceName}: ${data.result}`);
+                    } else {
+                        showAlert('warning', `Connectivity test for ${interfaceName}: ${data.error}`);
+                    }
+                })
+                .catch(error => {
+                    showAlert('danger', 'Failed to test connectivity');
+                });
+        }
+        
+        function autoDetectPrimaryWAN() {
+            if (!confirm('This will auto-detect and configure the primary WAN interface. Continue?')) {
+                return;
+            }
+            
+            fetch('/api/wan/auto-detect', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showAlert('danger', data.error);
+                } else {
+                    showAlert('success', `Primary WAN detected: ${data.primary_wan.name}`);
+                    refreshAvailableInterfaces();
+                    refreshStatus();
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'Failed to auto-detect primary WAN');
+            });
+        }
+        
+        function closeModal() {
+            const modal = document.querySelector('.wan-config-modal');
+            if (modal) {
+                modal.remove();
+            }
         }
         
         // Cleanup on page unload

@@ -654,6 +654,25 @@ EOF
     print_success "Management scripts created"
 }
 
+# Function for auto-detection of primary WAN
+auto_detect_primary_wan() {
+    print_status "Auto-detecting primary WAN interface..."
+    
+    # Run the interface detector
+    if python3 "$ROUTEROS_DIR/routing/interface_detector.py" --auto-configure; then
+        print_success "Primary WAN interface auto-detected and configured successfully"
+        
+        # Show detected configuration
+        if [ -f "$ROUTEROS_DIR/config/auto_detected.json" ]; then
+            echo "Detected configuration:"
+            cat "$ROUTEROS_DIR/config/auto_detected.json"
+        fi
+    else
+        print_warning "Failed to auto-detect primary WAN interface"
+        print_status "Manual configuration will be required through web interface"
+    fi
+}
+
 # Function to create installation summary
 create_installation_summary() {
     print_status "Creating installation summary..."
@@ -819,6 +838,9 @@ main() {
     configure_firewall
     create_management_scripts
     create_installation_summary
+    
+    # Auto-detect primary WAN interface for initial access
+    auto_detect_primary_wan
     
     # Start services
     start_services
